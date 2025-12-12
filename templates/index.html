@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mapa Web</title>
+    <style>
+        body { background: rgba(0, 91, 209, 1); margin: 0; display:flex; justify-content:center; }
+        canvas { background: #000; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas" width="1280" height="720"></canvas>
+
+<script>
+const tileSize = 32;
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const mapa = JSON.parse(`{{ mapa|tojson|safe }}`);
+const mapaArboles = JSON.parse(`{{ mapa_arboles|tojson|safe }}`);
+
+function img(name) {
+    const i = new Image();
+    i.src = "/static/assets/" + name;
+    return i;
+}
+
+const agua = img("agua.png");
+const pasto = img("pasto.png");
+const arena = img("arena.png");
+const piedra = img("piedra.png");
+const nieve = img("nieve.png");
+
+const arbol_m = img("arbol_m.png");
+const arbol_p = img("arbol_p.png");
+const arbol_a = img("arbol_a.png");
+const arbol_r = img("arbol_r.png");
+const arbol_n = img("arbol_n.png");
+
+function draw() {
+    ctx.clearRect(0,0,1280,720);
+
+    for (let y=0; y < 20; y++) {
+        for (let x=0; x < 40; x++) {
+
+            const px = x * tileSize;
+            const py = y * tileSize;
+
+            const t = mapa[y][x];
+            let imgBase = agua;
+
+            if (t==2) imgBase = pasto;
+            else if (t==3) imgBase = arena;
+            else if (t==4) imgBase = piedra;
+            else if (t==5) imgBase = nieve;
+
+            ctx.drawImage(imgBase, px, py);
+
+            if (mapaArboles[y][x] == 1) {
+                let at = arbol_m;
+                if (t==2) at = arbol_p;
+                else if (t==3) at = arbol_a;
+                else if (t==4) at = arbol_r;
+                else if (t==5) at = arbol_n;
+
+                ctx.drawImage(at, px, py);
+            }
+        }
+    }
+
+    requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
