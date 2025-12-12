@@ -1,6 +1,5 @@
 import pygame
 import asyncio
-import pathlib
 
 pygame.init()
 pygame.mixer.quit()
@@ -18,8 +17,7 @@ azul = (15, 19, 255)
 negro = (0, 0, 0)
 
 def img(n):
-    path = str(pathlib.Path("assets") / n)
-    return pygame.image.load(path)
+    return pygame.image.load("assets/" + n)
 
 agua = img("agua.png")
 pasto = img("pasto.png")
@@ -78,25 +76,6 @@ async def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 juego = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    menu_activo = 1
-                elif event.key == pygame.K_RETURN:
-                    if menu_activo == 2:
-                        guardar_mapa(guardar, mapa, mapa_arboles)
-                        guardar = ""
-                        menu_activo = 0
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = pygame.mouse.get_pos()
-                bx = mx // 32
-                by = (my - 198) // 32
-                if 0 <= bx < 40 and 0 <= by < 20 and menu_activo == 0:
-                    if material_activo == 6:
-                        mapa_arboles[by][bx] ^= 1
-                    else:
-                        mapa[by][bx] = material_activo
-                        mapa_arboles[by][bx] = 0
-
         pantalla.fill(azul)
         pantalla.blit(fondo, (0, 0))
         for y in range(20):
@@ -115,7 +94,17 @@ async def main():
                     elif t == 3: pantalla.blit(arbol_a, (px, py))
                     elif t == 4: pantalla.blit(arbol_r, (px, py))
                     elif t == 5: pantalla.blit(arbol_n, (px, py))
+        if menu_activo == 1:
+            pantalla.blit(menu_configuracion, (200, 100))
+            if cargar_menu:
+                pantalla.blit(menu_cargar, (390, 250))
+                texto = fuente.render(cargar, True, negro)
+                pantalla.blit(texto, texto.get_rect(center=(640, 421)))
+        if menu_activo == 2:
+            pantalla.blit(menu_guardar, (390, 250))
+            texto = fuente.render(guardar, True, negro)
+            pantalla.blit(texto, texto.get_rect(center=(640, 421)))
         pygame.display.flip()
         await asyncio.sleep(0)
 
-asyncio.ensure_future(main())
+asyncio.ensure_future(main())   
