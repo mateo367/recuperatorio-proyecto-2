@@ -1,6 +1,6 @@
 import webbrowser
 from threading import Timer
-from ss import app   # importa tu app Flask desde ss.py
+from app import app
 
 def abrir_navegador():
     webbrowser.open("http://127.0.0.1:5000/")

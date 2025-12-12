@@ -1,78 +1,231 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Mapa Web</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Creador de mapas</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <style>
-        body { background: rgba(0, 91, 209, 1); margin: 0; display:flex; justify-content:center; }
-        canvas { background: #000; margin-top: 20px; }
+        body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#0b2a6b; color:#fff; display:flex; flex-direction:column; align-items:center; }
+        #ui { margin-top:16px; display:flex; gap:12px; align-items:center; }
+        .boton { width:100px; height:100px; border-radius:8px; overflow:hidden; cursor:pointer; display:flex; align-items:center; justify-content:center; background:#123; }
+        .boton img { width:100%; height:100%; object-fit:cover; display:block; }
+        .boton.activo { outline:4px solid #ffec61; transform:scale(1.02); box-shadow:0 8px 20px rgba(2, 116, 209, 1); }
+        #canvasContainer { margin-top:14px; }
+        canvas { background:#000; display:block; image-rendering:pixelated; }
+        #controls { margin-top:10px; display:flex; gap:8px; align-items:center; }
+        button { padding:8px 12px; border-radius:6px; border: none; cursor:pointer; }
     </style>
 </head>
 <body>
 
-<canvas id="canvas" width="1280" height="720"></canvas>
+    <h2>Creador de mapas</h2>
 
-<script>
-const tileSize = 32;
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+    <div id="ui"></div>
 
-const mapa = JSON.parse(`{{ mapa|tojson|safe }}`);
-const mapaArboles = JSON.parse(`{{ mapa_arboles|tojson|safe }}`);
+    <div id="canvasContainer">
+    <canvas id="canvas" width="1280" height="640"></canvas>
+    </div>
 
-function img(name) {
-    const i = new Image();
-    i.src = "/static/assets/" + name;
-    return i;
-}
+    <div id="controls">
+    <button id="guardarLocalBtn">Guardar </button>
+    <input type="file" id="cargarLocalInput" style="display:none" accept=".txt">
+    <button id="cargarLocalBtn">Cargar </button>
+    </div>
 
-const agua = img("agua.png");
-const pasto = img("pasto.png");
-const arena = img("arena.png");
-const piedra = img("piedra.png");
-const nieve = img("nieve.png");
+    <script>
+    (() => {
+    const tile_w = 32;
+    const tile_h = 32;
+    const cols = 40;
+    const rows = 20;
+    const grid_offset_y = 0;
 
-const arbol_m = img("arbol_m.png");
-const arbol_p = img("arbol_p.png");
-const arbol_a = img("arbol_a.png");
-const arbol_r = img("arbol_r.png");
-const arbol_n = img("arbol_n.png");
+    const material_agua = 1;
+    const material_pasto = 2;
+    const material_arena = 3;
+    const material_piedra = 4;
+    const material_nieve = 5;
+    const material_arbol = 6;
 
-function draw() {
-    ctx.clearRect(0,0,1280,720);
+    let mapa = Array.from({length: rows}, () => Array.from({length: cols}, () => material_agua));
+    let mapa_arboles = Array.from({length: rows}, () => Array.from({length: cols}, () => 0));
 
-    for (let y=0; y < 20; y++) {
-        for (let x=0; x < 40; x++) {
+    let material_activo = material_agua;
 
-            const px = x * tileSize;
-            const py = y * tileSize;
+    const assets = {
+        [material_agua]: '/static/assets/agua.png',
+        [material_pasto]: '/static/assets/pasto.png',
+        [material_arena]: '/static/assets/arena.png',
+        [material_piedra]: '/static/assets/piedra.png',
+        [material_nieve]: '/static/assets/nieve.png'
+    };
 
-            const t = mapa[y][x];
-            let imgBase = agua;
+    const active_imgs = {
+        [material_agua]: '/static/assets/agua_activo.png',
+        [material_pasto]: '/static/assets/pasto_activo.png',
+        [material_arena]: '/static/assets/arena_activo.png',
+        [material_piedra]: '/static/assets/piedra_activo.png',
+        [material_nieve]: '/static/assets/nieve_activo.png',
+        [material_arbol]: '/static/assets/arbol_activo.png'
+    };
 
-            if (t==2) imgBase = pasto;
-            else if (t==3) imgBase = arena;
-            else if (t==4) imgBase = piedra;
-            else if (t==5) imgBase = nieve;
+    const arbol_imgs = {
+        [material_agua]: '/static/assets/arbol_m.png',
+        [material_pasto]: '/static/assets/arbol_p.png',
+        [material_arena]: '/static/assets/arbol_a.png',
+        [material_piedra]: '/static/assets/arbol_r.png',
+        [material_nieve]: '/static/assets/arbol_n.png'
+    };
 
-            ctx.drawImage(imgBase, px, py);
+    const img_cache = {};
+    function load_image(url) {
+        return new Promise((res, rej) => {
+        if (img_cache[url]) return res(img_cache[url]);
+        const img = new Image();
+        img.src = url;
+        img.onload = () => { img_cache[url] = img; res(img); };
+        img.onerror = rej;
+        });
+    }
 
-            if (mapaArboles[y][x] == 1) {
-                let at = arbol_m;
-                if (t==2) at = arbol_p;
-                else if (t==3) at = arbol_a;
-                else if (t==4) at = arbol_r;
-                else if (t==5) at = arbol_n;
+    const ui = document.getElementById('ui');
+    const botones_orden = [material_agua, material_pasto, material_arena, material_piedra, material_nieve, material_arbol];
+    const botones_elements = {};
 
-                ctx.drawImage(at, px, py);
+    function crear_botones() {
+        botones_orden.forEach(mat => {
+        const div = document.createElement('div');
+        div.className = 'boton';
+        div.dataset.mat = mat;
+        const img = document.createElement('img');
+        img.src = active_imgs[mat] || assets[mat];
+        div.appendChild(img);
+        div.addEventListener('click', () => {
+            material_activo = Number(mat);
+            actualizar_ui();
+        });
+        ui.appendChild(div);
+        botones_elements[mat] = div;
+        });
+        actualizar_ui();
+    }
+
+    function actualizar_ui() {
+        botones_orden.forEach(mat => {
+        if (Number(mat) === material_activo) {
+            botones_elements[mat].classList.add('activo');
+        } else {
+            botones_elements[mat].classList.remove('activo');
+        }
+        });
+    }
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    async function draw_all() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        for (let fy=0; fy<rows; fy++){
+        for (let fx=0; fx<cols; fx++){
+            const base = mapa[fy][fx];
+            const px = fx * tile_w;
+            const py = fy * tile_h + grid_offset_y;
+
+            const url = assets[base];
+            if (url) {
+            const img = await load_image(url);
+            ctx.drawImage(img, px, py, tile_w, tile_h);
             }
+
+            if (mapa_arboles[fy][fx] === 1) {
+            const aurl = arbol_imgs[base];
+            const aimg = await load_image(aurl);
+            ctx.drawImage(aimg, px, py, tile_w, tile_h);
+            }
+        }
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.05)";
+        for (let x=0; x<=cols; x++){
+        ctx.beginPath();
+        ctx.moveTo(x*tile_w, grid_offset_y);
+        ctx.lineTo(x*tile_w, grid_offset_y + rows*tile_h);
+        ctx.stroke();
+        }
+        for (let y=0; y<=rows; y++){
+        ctx.beginPath();
+        ctx.moveTo(0, grid_offset_y + y*tile_h);
+        ctx.lineTo(cols*tile_w, grid_offset_y + y*tile_h);
+        ctx.stroke();
         }
     }
 
-    requestAnimationFrame(draw);
-}
+    crear_botones();
+    draw_all();
 
-draw();
-</script>
+    canvas.addEventListener('click', (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((ev.clientX - rect.left));
+        const y = Math.floor((ev.clientY - rect.top));
+
+        if (y >= grid_offset_y && y < grid_offset_y + rows * tile_h) {
+        const gx = Math.floor(x / tile_w);
+        const gy = Math.floor((y - grid_offset_y) / tile_h);
+        if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
+            if (material_activo === material_arbol) {
+                mapa_arboles[gy][gx] = mapa_arboles[gy][gx] === 1 ? 0 : 1;
+            } else {
+                mapa[gy][gx] = material_activo;
+                mapa_arboles[gy][gx] = 0;
+            }
+            draw_all();
+        }
+        }
+    });
+
+    function descargar_archivo(nombre, contenido) {
+        const blob = new Blob([contenido], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("guardarLocalBtn").addEventListener("click", () => {
+        const nombre = prompt("Nombre del mapa:");
+        if (!nombre) return;
+        const datos = { mapa, mapa_arboles };
+        const texto = JSON.stringify(datos);
+        descargar_archivo(nombre + ".txt", texto);
+    });
+
+    document.getElementById("cargarLocalBtn").addEventListener("click", () => {
+        document.getElementById("cargarLocalInput").click();
+    });
+
+    document.getElementById("cargarLocalInput").addEventListener("change", (event) => {
+        const archivo = event.target.files[0];
+        if (!archivo) return;
+        const lector = new FileReader();
+        lector.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            mapa = data.mapa;
+            mapa_arboles = data.mapa_arboles;
+            draw_all();
+        } catch (err) {
+            alert("Archivo inválido");
+        }
+        };
+        lector.readAsText(archivo);
+    });
+
+    })();
+    </script>
 
 </body>
 </html>
